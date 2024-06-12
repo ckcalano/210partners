@@ -1,0 +1,17 @@
+package cs.b2b.mapping.scripts
+
+import java.sql.Connection
+
+class VEN_4010_210_PREP {
+	Connection conn
+
+	String mapping(String inputXmlBody, String[] runtimeParams, Connection conn) {
+		this.conn = conn
+		return modifyInput(inputXmlBody)
+	}
+
+	String modifyInput(String message_content){
+		message_content = message_content.replaceAll("~","\n")
+		return message_content
+	}
+}
