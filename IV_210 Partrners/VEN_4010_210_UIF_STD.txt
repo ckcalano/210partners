@@ -1,0 +1,237 @@
+package cs.b2b.mapping.scripts
+
+import cs.b2b.core.mapping.bean.x12.iv.iv210.v4010.B35
+import cs.b2b.core.mapping.bean.x12.iv.iv210.v4010.C37
+import cs.b2b.core.mapping.bean.x12.iv.iv210.v4010.EDI_T210
+import cs.b2b.core.mapping.bean.x12.iv.iv210.v4010.G6211
+import cs.b2b.core.mapping.bean.x12.iv.iv210.v4010.Loop_ST3
+import cs.b2b.core.mapping.bean.x12.iv.iv210.v4010.N723
+import cs.b2b.core.mapping.bean.x12.iv.iv210.v4010.N99
+import cs.b2b.core.mapping.bean.x12.iv.iv210.v4010.R312
+import cs.b2b.core.mapping.util.MappingUtil
+import cs.b2b.core.mapping.util.MappingUtil_IV_210_I_Common
+import cs.b2b.core.mapping.util.XmlBeanParser
+import groovy.xml.MarkupBuilder
+import groovy.xml.XmlUtil
+import org.simplejavamail.email.Email
+
+import java.sql.Connection
+
+class VEN_4010_210_UIF_STD {
+	MappingUtil util = new MappingUtil()
+	MappingUtil_IV_210_I_Common iv210Util = new MappingUtil_IV_210_I_Common()
+
+	def appSessionId
+	def sourceFileName
+	def TP_ID = null
+	def MSG_TYPE_ID
+	def DIR_ID
+	def MSG_REQ_ID
+	def MSG_UUID
+	def MSG_FMT_ID
+	Connection conn
+
+	List<Email> emailList = new ArrayList<Email>()
+	String jobOrderNo = ''
+	String invoiceNo = ''
+
+	public void generateEDI(MarkupBuilder outXml, Loop_ST3 currLoopST, String isa06, Connection conn) {
+		outXml.'Record-JobRec' {
+			B35 b3 = currLoopST?.B3
+			C37 c3 = currLoopST?.C3
+			N723 n7 = currLoopST?.Loop_L0200?.last()?.N7
+			List<R312> loopR3 = currLoopST?.R3
+			List<N99> loopN9 = currLoopST?.N9
+			List<G6211> loopG62 = currLoopST?.G62
+
+			String jobOffice = ""
+			String invoiceNoR3 = ""
+			String invoiceTotalR3 = ""
+			String invoiceDateR3 = ""
+			loopR3?.each { currLoopR3 ->
+				String r303 = currLoopR3?.E19_03?.trim() ?: ''
+				String r306 = currLoopR3?.E76_06 ?: ''
+				String r307 = currLoopR3?.E373_07 ?: ''
+				String r308 = currLoopR3?.E610_08 ?: ''
+				if (r303){
+					jobOffice = util.substring(r303, 1, 3)
+				}
+				if (r306){
+					invoiceNoR3 = util.substring(r306?.trim(), 1, 22)
+				}
+				if (r308){
+					invoiceTotalR3 = util.substring(r308?.trim(), 1, 9)
+					if (r308?.length() > 9){
+						invoiceTotalR3 = util.substring(r308?.trim(), r308?.length() - 8, r308?.length())
+					}
+				}
+				if (r307?.trim()){
+					invoiceDateR3 = util.substring(r307, 5, 8)?.concat(util.substring(r307, 1, 4))
+				}
+			}
+
+			jobOrderNo = ""
+			String partnerIdConv = iv210Util?.getIntCdeRefByExtCde('PARTNER_ID_CONV', '210', 'INVOICE', DIR_ID, isa06, isa06, conn) ?: ''
+			loopN9?.each { currLoopN9 ->
+				String n902 = currLoopN9?.E127_02?.trim() ?: ''
+				if (n902){
+					jobOrderNo = util.substring(n902, 1, 11)
+				}
+			}
+
+			'JobOffice_01' jobOffice?.padRight(3)
+			'JobOrderNo_02' jobOrderNo?.padRight(11)?.concat(partnerIdConv)?.padRight(15)
+
+			String n701 = n7?.E206_01?.trim() ?: ''
+			String n702 = n7?.E207_02?.trim() ?: ''
+			String n718 = n7?.E761_18?.trim() ?: ''
+			'ContainerPrefix_03' n701?.padRight(4)
+			'ContainerNo_04' util.substring(n702, 1, 6)?.padRight(6)
+			'ContainerChkDigit_05' n718?.padRight(1)
+
+			String deliveryDate = ""
+			loopG62?.each { currLoopG62 ->
+				String g6202 = currLoopG62?.E373_02?.trim() ?: ''
+				if (g6202){
+					deliveryDate = util.substring(g6202, 5, 8)?.concat(util.substring(g6202, 1, 4))
+				}
+			}
+			'DeliveryDate_06' deliveryDate?.padRight(8)
+
+			String invoiceNoB3 = ""
+			if (b3?.E76_02){
+				invoiceNoB3 = util.substring(b3?.E76_02?.trim(), 1, 22)
+			}
+
+			invoiceNo = ""
+			String invoiceCurr = c3?.E100_01?.trim() ?: ''
+			if (invoiceNoR3){
+				invoiceNo = invoiceNoR3
+			} else if (invoiceNoB3){
+				invoiceNo = invoiceNoB3
+			}
+			'InvoiceNo_07' invoiceNo?.padRight(22)
+			'InvoiceCurrency_08' invoiceCurr?.padRight(3)
+
+			String invoiceTotalB3 = ""
+			String b307 = b3?.E193_07 ?: ''
+			if (b307){
+				invoiceTotalB3 = util.substring(b307?.trim(), 1, 9)
+				if (b307?.length() > 9){
+					invoiceTotalB3 = util.substring(b307?.trim(), b307?.length() - 8, b307?.length())
+				}
+			}
+
+			String invoiceTotal = ""
+			if (invoiceTotalR3){
+				invoiceTotal = invoiceTotalR3
+			} else if (invoiceTotalB3){
+				invoiceTotal = invoiceTotalB3
+			}
+			'InvoiceTotal_09' invoiceTotal?.padLeft(9, "0")
+
+			String invoiceDateB3 = ""
+			String b306 = b3?.E373_06 ?: ''
+			if (b306?.trim()){
+				invoiceDateB3 = util.substring(b306?.trim(), 5, 8)?.concat(util.substring(b306, 1, 4))
+			}
+
+			String invoiceDate = invoiceDateB3
+			if (invoiceDateR3){
+				invoiceDate = invoiceDateR3
+			}
+			'InvoiceDate_10' invoiceDate?.padRight(8)
+			'ECMUUID_15' ''?.padRight(50)
+			'OriginCity_11' ''?.padRight(19)
+			'OriginStateCde_12' ''?.padRight(2)
+			'DestinationCity_13' ''?.padRight(19)
+			'DestinationStateCde_14' ''?.padRight(2)
+		}
+	}
+
+	String mapping(String inputXmlBody, String[] runtimeParams, Connection conn) {
+		/**
+		 * Part I: prep handling here, remove XML BOM flag in file beginning, customer sample contains it
+		 */
+		inputXmlBody = util.removeBOM(inputXmlBody)
+		//println(inputXmlBody)
+		/**
+		 * Part II: get app mapping runtime parameters
+		 */
+		this.conn = conn
+		appSessionId = util.getRuntimeParameter("B2BSessionID", runtimeParams)
+		sourceFileName = util.getRuntimeParameter("OriginalSourceFileName", runtimeParams)
+		//pmt info
+		TP_ID = util.getRuntimeParameter("TP_ID", runtimeParams)
+		MSG_TYPE_ID = util.getRuntimeParameter("MSG_TYPE_ID", runtimeParams)
+		DIR_ID = util.getRuntimeParameter("DIR_ID", runtimeParams)
+		MSG_REQ_ID = util.getRuntimeParameter("MSG_REQ_ID", runtimeParams)
+		MSG_UUID = MSG_REQ_ID + ',' + UUID.randomUUID()
+		MSG_FMT_ID = util.getRuntimeParameter("MSG_FMT_ID", runtimeParams)
+		/**
+		 * Part III: read xml and prepare output xml
+		 */
+		XmlBeanParser parser = new XmlBeanParser()
+		EDI_T210 t210 = parser.xmlParser(inputXmlBody, EDI_T210.class)
+
+		StringWriter writer = new StringWriter()
+		MarkupBuilder outXml = new MarkupBuilder(writer)
+		outXml.mkp.xmlDeclaration(version: "1.0", encoding: "UTF-8")
+
+		TimeZone.setDefault(TimeZone.getTimeZone('UTC'))
+		Date currentSystemDt = new Date()
+
+		StringWriter bizKeyWriter = new StringWriter()
+		MarkupBuilder bizKeyXml = new MarkupBuilder(bizKeyWriter)
+		bizKeyXml.mkp.xmlDeclaration(version: "1.0", encoding: "utf-8")
+
+		/**
+		 * Part IV: mapping script start from here
+		 */
+		String bodyRoot = outXml.createNode('LAYOUT')
+		String bizKeyRoot = bizKeyXml.createNode('root')
+
+		List<Map<String,String>> errorKeyList = new ArrayList<Map<String,String>>()
+		List<Map<String,String>> validationErrorList = []
+		List<Map<String,String>> invalidInvDateDetails = new ArrayList<Map<String,String>>()
+
+		Date date = new Date().parse("yyMMdd", t210?.ISA?.I08_09?.trim()) //yy-MM-dd unparseable [Unparseable date: "200331"]
+		String isa09_fmt = date.format("yyyy-MM-dd")
+		String isa06 = t210?.ISA?.I06_06?.trim() ?: ''
+
+
+		t210?.Loop_ST?.eachWithIndex { currLoopST, loopST_idx ->
+			iv210Util.filterValidTxn_G62(currLoopST, loopST_idx, validationErrorList)
+			iv210Util.filterValidTxn_N9(currLoopST, loopST_idx, validationErrorList)
+
+			boolean isValidTransaction = (validationErrorList?.findAll{it?.INDEX == (loopST_idx as String) && it?.TYPE == 'E'}?.size() == 0)
+			if(isValidTransaction){
+				generateEDI(outXml, currLoopST, isa06, conn)
+				String invoiceDate = iv210Util?.getInvoiceDate(currLoopST)
+				iv210Util.validateInvoiceDate(loopST_idx, isa09_fmt, jobOrderNo, invoiceNo, invoiceDate, errorKeyList, invalidInvDateDetails)
+			}
+			iv210Util.buildBizKey(bizKeyXml, currLoopST, loopST_idx, TP_ID, MSG_TYPE_ID, errorKeyList, validationErrorList)
+		}
+
+		if(invalidInvDateDetails?.size() > 0){
+			iv210Util?.generateEmail(emailList, invalidInvDateDetails, TP_ID, MSG_REQ_ID, conn)
+		}
+
+		outXml.nodeCompleted(null, bodyRoot)
+		String outEdi = writer?.toString()
+
+		bizKeyXml.nodeCompleted(null, bizKeyRoot)
+
+		iv210Util.promoteBizKeyToSession(appSessionId, bizKeyWriter)
+		iv210Util.promoteEmailSenderSynAsynMode(appSessionId)
+		iv210Util.promoteEmail(appSessionId, emailList)
+
+		Node nodeOutput = new XmlParser().parseText(outEdi)
+		String cleanedOutputXml = (XmlUtil.serialize(nodeOutput))
+
+		writer.close();
+		bizKeyWriter.close()
+
+		return cleanedOutputXml
+	}
+}
